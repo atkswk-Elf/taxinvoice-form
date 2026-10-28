@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ออกใบกำกับภาษี</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --accent:#1F3A5F; --light:#EEF2F7; --line:#d5dbe3; --muted:#6B7785; --err:#b42318; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Sarabun, Tahoma, sans-serif; font-size:16px; color:#222; background:#f4f6f9; }
+  header { background:var(--accent); color:#fff; padding:14px 16px; font-weight:600; font-size:18px; }
+  main { padding:12px 16px 120px; max-width:640px; margin:0 auto; }
+  section { background:#fff; border-radius:10px; padding:12px; margin-bottom:12px; border:1px solid var(--line); }
+  h2 { font-size:15px; margin:0 0 8px; color:var(--accent); }
+  label { display:block; font-size:13px; color:var(--muted); margin:8px 0 3px; }
+  input, select, textarea { width:100%; font:inherit; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  textarea { min-height:64px; resize:vertical; }
+  .row { display:flex; gap:8px; } .row > * { flex:1; min-width:0; }
+  .item { border:1px dashed var(--line); border-radius:8px; padding:8px; margin-bottom:8px; position:relative; }
+  .item .no { font-weight:600; font-size:13px; color:var(--accent); }
+  .item .amt { text-align:right; font-size:14px; margin-top:4px; }
+  .del { position:absolute; top:4px; right:6px; border:0; background:none; color:var(--err); font-size:20px; }
+  .radio { display:flex; gap:14px; flex-wrap:wrap; } .radio label { display:flex; gap:6px; align-items:center; color:#222; font-size:15px; margin:4px 0; }
+  .radio input { width:auto; }
+  button.add { width:100%; padding:10px; border:1px dashed var(--accent); background:var(--light); color:var(--accent); border-radius:8px; font:inherit; }
+  .totals div { display:flex; justify-content:space-between; padding:3px 0; }
+  .totals .big { font-weight:600; font-size:17px; }
+  .words { color:var(--muted); font-size:14px; text-align:right; }
+  .bar { position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--line); padding:10px 16px; }
+  .bar button { width:100%; max-width:640px; display:block; margin:0 auto; padding:13px; border:0; border-radius:10px; background:var(--accent); color:#fff; font:inherit; font-weight:600; }
+  .bar button:disabled { opacity:.5; }
+  .msg { padding:10px 12px; border-radius:8px; margin-bottom:12px; white-space:pre-wrap; word-break:break-all; }
+  .msg.err { background:#fde8e6; color:var(--err); } .msg.ok { background:#e6f4ea; color:#14532d; }
+  .msg a { color:inherit; font-weight:600; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>ออกใบกำกับภาษี</header>
+<main>
+  <div id="msg" class="msg" hidden></div>
+
+  <form id="f" hidden>
+    <section>
+      <h2>ผู้ขาย / เอกสาร</h2>
+      <label for="seller">ผู้ขาย (หัวบิล)</label>
+      <select id="seller" required></select>
+      <div class="row">
+        <div><label for="date">วันที่ออกใบ</label><input id="date" type="date" required></div>
+        <div><label for="vatMode">ราคาที่กรอก</label>
+          <select id="vatMode"><option value="include">รวม VAT แล้ว</option><option value="exclude">ยังไม่รวม VAT</option></select></div>
+      </div>
+      <label>เลขที่ใบกำกับ</label><input value="ระบบรันให้อัตโนมัติ" disabled>
+    </section>
+
+    <section>
+      <h2>ลูกค้า</h2>
+      <label for="bTax">เลขประจำตัวผู้เสียภาษี (13 หลัก)</label>
+      <input id="bTax" inputmode="numeric" maxlength="17" required>
+      <label for="bName">ชื่อลูกค้า / บริษัท</label>
+      <input id="bName" maxlength="120" required>
+      <label for="bBranch">สาขา</label>
+      <input id="bBranch" value="สำนักงานใหญ่" maxlength="40">
+      <label for="bAddr">ที่อยู่</label>
+      <textarea id="bAddr" maxlength="200" required></textarea>
+    </section>
+
+    <section>
+      <h2>รายการสินค้า (สูงสุด 10)</h2>
+      <div id="items"></div>
+      <button type="button" class="add" id="addItem">+ เพิ่มรายการ</button>
+    </section>
+
+    <section class="totals">
+      <h2>สรุปยอด</h2>
+      <div class="big"><span>รวมเป็นเงิน</span><span id="tGross">-</span></div>
+      <div><span>ภาษีมูลค่าเพิ่ม 7.00%</span><span id="tVat">-</span></div>
+      <div><span>มูลค่าสินค้า</span><span id="tNet">-</span></div>
+      <div class="words" id="tWords"></div>
+    </section>
+
+    <section>
+      <h2>การชำระเงิน</h2>
+      <div class="radio">
+        <label><input type="radio" name="pay" value="" checked> ยังไม่ระบุ</label>
+        <label><input type="radio" name="pay" value="cash"> เงินสด</label>
+        <label><input type="radio" name="pay" value="transfer"> เงินโอน</label>
+      </div>
+      <label for="payDate">วันที่ชำระ (เว้นว่างได้)</label>
+      <input id="payDate" type="date">
+    </section>
+  </form>
+</main>
+<div class="bar" id="bar" hidden><button id="submit" type="button">ออกใบกำกับ + ส่งเข้า LINE</button></div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="config.js"></script>
+<script src="calc.js"></script>
+<script>
+(function () {
+  var MOCK = /[?&]mock=1/.test(location.search);   // ทดสอบในเครื่อง ไม่ต่อ LINE/Apps Script
+  var $ = function (id) { return document.getElementById(id); };
+  var idToken = null;
+
+  function showMsg(text, kind, html) {
+    var m = $('msg'); m.hidden = false; m.className = 'msg ' + kind;
+    if (html) m.innerHTML = html; else m.textContent = text;
+    window.scrollTo(0, 0);
+  }
+
+  function api(action, data) {
+    if (MOCK) return mockApi(action, data);
+    return fetch(APP_CONFIG.API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // text/plain = ไม่ติด CORS preflight
+      body: JSON.stringify({ action: action, idToken: idToken, data: data })
+    }).then(function (r) { return r.json(); });
+  }
+
+  function mockApi(action, data) {
+    return new Promise(function (ok) { setTimeout(function () {
+      if (action === 'sellers') return ok({ ok: true, sellers: [{ id: 'BLG', name: 'บริษัท บริทิช เลธเธอร์ กรุ๊ป จำกัด' }, { id: '3BC', name: '3BlackCat Studio' }] });
+      try {
+        var c = InvoiceCalc.calculate(data.items, data.vatMode);
+        ok({ ok: true, result: { invoiceNo: 'HS0119981', pdfUrl: 'https://example.com/mock.pdf', linePush: 'ok', gross: c.gross, vat: c.vat, net: c.net, bahtText: c.bahtText } });
+      } catch (e) { ok({ ok: false, error: e.message }); }
+    }, 300); });
+  }
+
+  // ---------- รายการสินค้า ----------
+  function addItem(v) {
+    var n = $('items').children.length;
+    if (n >= InvoiceCalc.MAX_ITEMS) return;
+    v = v || {};
+    var d = document.createElement('div');
+    d.className = 'item';
+    d.innerHTML =
+      '<div class="no"></div><button type="button" class="del" aria-label="ลบรายการ">&times;</button>' +
+      '<div class="row"><div><label>รหัสสินค้า</label><input data-k="code" maxlength="20"></div>' +
+      '<div style="flex:2"><label>ชื่อสินค้า</label><input data-k="name" maxlength="80"></div></div>' +
+      '<div class="row"><div><label>จำนวน</label><input data-k="qty" inputmode="decimal" value="1"></div>' +
+      '<div><label>ราคา/หน่วย</label><input data-k="price" inputmode="decimal"></div></div>' +
+      '<div class="amt"></div>';
+    ['code', 'name', 'qty', 'price'].forEach(function (k) { if (v[k] != null) d.querySelector('[data-k=' + k + ']').value = v[k]; });
+    d.querySelector('.del').onclick = function () { if ($('items').children.length > 1) { d.remove(); refresh(); } };
+    $('items').appendChild(d);
+    refresh();
+  }
+
+  function readItems() {
+    return Array.prototype.map.call($('items').children, function (d) {
+      var o = {}; d.querySelectorAll('[data-k]').forEach(function (i) { o[i.dataset.k] = i.value; }); return o;
+    });
+  }
+
+  // พรีวิวใช้ InvoiceCalc ตัวเดียวกับฝั่งสร้าง PDF (calc.js = Calc.gs)
+  function refresh() {
+    var rows = $('items').children;
+    Array.prototype.forEach.call(rows, function (d, i) {
+      d.querySelector('.no').textContent = 'รายการที่ ' + (i + 1);
+      var it = readItems()[i];
+      try { d.querySelector('.amt').textContent = 'จำนวนเงิน ' + InvoiceCalc.calculate([it], 'exclude').lines[0].amount; }
+      catch (e) { d.querySelector('.amt').textContent = ''; }
+    });
+    $('addItem').hidden = rows.length >= InvoiceCalc.MAX_ITEMS;
+    try {
+      var c = InvoiceCalc.calculate(readItems(), $('vatMode').value);
+      $('tGross').textContent = '฿ ' + c.gross; $('tVat').textContent = '฿ ' + c.vat;
+      $('tNet').textContent = '฿ ' + c.net; $('tWords').textContent = '(' + c.bahtText + ')';
+    } catch (e) {
+      $('tGross').textContent = $('tVat').textContent = $('tNet').textContent = '-';
+      $('tWords').textContent = e.message;
+    }
+  }
+
+  function collect() {
+    var pay = document.querySelector('input[name=pay]:checked').value;
+    return {
+      sellerId: $('seller').value, date: $('date').value, vatMode: $('vatMode').value,
+      payMethod: pay, payDate: $('payDate').value,
+      buyer: { taxId: $('bTax').value, name: $('bName').value, branch: $('bBranch').value, address: $('bAddr').value },
+      items: readItems()
+    };
+  }
+
+  function validate(d) {
+    if (!d.sellerId) return 'เลือกผู้ขายก่อน';
+    if (!d.date) return 'ใส่วันที่ออกใบ';
+    if (!/^\d{13}$/.test(d.buyer.taxId.replace(/[\s-]/g, ''))) return 'เลขประจำตัวผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก';
+    if (!d.buyer.name.trim()) return 'ใส่ชื่อลูกค้า';
+    if (!d.buyer.address.trim()) return 'ใส่ที่อยู่ลูกค้า';
+    try { InvoiceCalc.calculate(d.items, d.vatMode); } catch (e) { return e.message; }
+    return '';
+  }
+
+  function submit() {
+    var d = collect(), err = validate(d);
+    if (err) return showMsg(err, 'err');
+    var c = InvoiceCalc.calculate(d.items, d.vatMode);
+    if (!confirm('ออกใบกำกับยอด ฿ ' + c.gross + '\nให้ ' + d.buyer.name + ' ?\n(ออกแล้วเลขที่จะเดินทันที)')) return;
+    $('submit').disabled = true; $('submit').textContent = 'กำลังสร้าง PDF...';
+    api('create', d).then(function (res) {
+      if (!res.ok) throw new Error(res.error);
+      var r = res.result;
+      // กันตัวเลขไม่ตรง: ยอดจากเซิร์ฟเวอร์ต้องเท่ากับที่เห็นในฟอร์ม
+      var warn = (r.gross !== c.gross || r.vat !== c.vat || r.net !== c.net) ? '\n⚠ ยอดในใบไม่ตรงกับพรีวิว ตรวจ PDF ก่อนใช้' : '';
+      var a = document.createElement('a'); a.href = r.pdfUrl; a.target = '_blank'; a.textContent = 'เปิด PDF';
+      showMsg('', 'ok');
+      $('msg').textContent = 'ออกใบ ' + r.invoiceNo + ' แล้ว · ยอด ฿ ' + r.gross +
+        (r.linePush === 'ok' ? '\nส่งเข้าแชท LINE แล้ว' : '\nส่งเข้า LINE ไม่สำเร็จ (' + r.linePush + ') ใช้ลิงก์นี้แทน') + warn + '\n';
+      $('msg').appendChild(a);
+      $('f').hidden = true; $('bar').hidden = true;
+    }).catch(function (e) {
+      showMsg('ออกใบไม่สำเร็จ: ' + e.message, 'err');
+      $('submit').disabled = false; $('submit').textContent = 'ออกใบกำกับ + ส่งเข้า LINE';
+    });
+  }
+
+  function start() {
+    var today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);   // วันที่ไทย
+    $('date').value = today;
+    addItem();
+    ['items', 'vatMode'].forEach(function (id) { $(id).addEventListener('input', refresh); $(id).addEventListener('change', refresh); });
+    $('addItem').onclick = function () { addItem(); };
+    $('submit').onclick = submit;
+    return api('sellers').then(function (res) {
+      if (!res.ok) {
+        var extra = res.userId ? '\n\nuserId ของคุณ:\n' + res.userId + '\n(ให้ใส่ใน Script property ALLOWED_USER_IDS)' : '';
+        throw new Error(res.error + extra);
+      }
+      $('seller').innerHTML = '';
+      res.sellers.forEach(function (s) {
+        var o = document.createElement('option'); o.value = s.id; o.textContent = s.name; $('seller').appendChild(o);
+      });
+      $('f').hidden = false; $('bar').hidden = false;
+    });
+  }
+
+  var boot = MOCK ? Promise.resolve() : liff.init({ liffId: APP_CONFIG.LIFF_ID }).then(function () {
+    if (!liff.isLoggedIn()) { liff.login(); return new Promise(function () {}); }
+    idToken = liff.getIDToken();
+  });
+  boot.then(start).catch(function (e) { showMsg('เปิดฟอร์มไม่สำเร็จ: ' + (e.message || e), 'err'); });
+})();
+</script>
+</body>
+</html>
